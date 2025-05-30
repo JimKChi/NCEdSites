@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exploring Grading Equity in CPS & Aspen SIS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Visualization & Content Choices:
+        - Report Finding (Gender GPA Gap): Goal: Inform/Compare. Viz: Bar Chart (Chart.js). Interaction: Tooltips. Justification: Clear visual of disparity.
+        - Report Finding (Teacher Grading Weights): Goal: Inform. Viz: Pie Chart (Chart.js). Interaction: Tooltips. Justification: Snapshot of typical weights.
+        - GfE Pillars: Goal: Organize/Inform. Presentation: Interactive tabs (HTML/JS). Interaction: Click to reveal details. Justification: Digestible presentation of core concepts. Gemini API added to generate classroom scenarios for each pillar.
+        - Traditional vs. Equitable Grading: Goal: Compare. Presentation: HTML Table. Interaction: N/A. Justification: Direct side-by-side comparison.
+        - Aspen Configuration for GfE Pillars: Goal: Organize/Inform. Presentation: Accordions (HTML/JS). Interaction: Click to expand/collapse. Justification: Manages detailed technical information effectively.
+        - Textual Summaries: Goal: Inform/Contextualize. Presentation: Structured HTML text. Justification: Provides necessary explanations and narrative.
+        - Gemini API for Discussion Starters: Goal: Engage/Explore. Presentation: Button + Dynamic Text Area. Interaction: Click to generate. Justification: Deepens reflection on report implications.
+        - Library/Method: Chart.js for charts, Vanilla JS for all interactions (including Gemini API calls), Tailwind CSS for styling.
+    -->
+    <style>
+        body { font-family: 'Inter', sans-serif; scroll-behavior: smooth; }
+        .chart-container { position: relative; width: 100%; max-width: 600px; margin-left: auto; margin-right: auto; height: 300px; max-height: 350px; }
+        @media (min-width: 768px) { .chart-container { height: 350px; max-height: 400px;} }
+        .active-nav { color: #ffffff; background-color: #0284c7; } /* sky-600 */
+        .nav-item { padding: 0.75rem 1rem; border-radius: 0.375rem; transition: background-color 0.3s ease, color 0.3s ease; font-weight: 500; }
+        .nav-item:hover { background-color: #f0f9ff; color: #0369a1; } /* sky-50 hover, sky-700 text */
+        .section-title { font-size: 1.875rem; font-weight: 700; margin-bottom: 1rem; color: #1e293b; } /* slate-800 */
+        .subsection-title { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.75rem; color: #334155; } /* slate-700 */
+        .content-card { background-color: #ffffff; padding: 1.5rem; border-radius: 0.5rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06); margin-bottom:1rem; }
+        .accordion-button { background-color: #f1f5f9; /* slate-100 */ color: #1e293b; /* slate-800 */ padding: 1rem; width: 100%; text-align: left; border:none; border-radius: 0.375rem; font-weight: 600; display: flex; justify-content: space-between; align-items: center; cursor:pointer; }
+        .accordion-button:hover { background-color: #e2e8f0; /* slate-200 */ }
+        .accordion-content { background-color: #ffffff; padding: 1rem; border: 1px solid #e2e8f0; border-top:none; border-radius: 0 0 0.375rem 0.375rem; display:none; }
+        .tab-button { padding: 0.5rem 1rem; margin-right: 0.5rem; border-radius: 0.375rem 0.375rem 0 0; font-weight:500; cursor:pointer; background-color: #e0f2fe; /* sky-100 */ color: #075985; /* sky-800 */ }
+        .tab-button.active { background-color: #0ea5e9; /* sky-500 */ color: white; }
+        .tab-content { display:none; padding:1rem; border: 1px solid #e0f2fe; border-top:none; border-radius: 0 0 0.375rem 0.375rem; }
+        .tab-content.active { display:block; }
+        .gemini-button { background-color: #7c3aed; /* violet-600 */ color: white; padding: 0.5rem 1rem; border-radius: 0.375rem; font-weight: 500; transition: background-color 0.3s ease; margin-top: 0.75rem;}
+        .gemini-button:hover { background-color: #6d28d9; /* violet-700 */ }
+        .gemini-output { margin-top: 1rem; padding: 1rem; background-color: #f0f9ff; /* sky-50 */ border-left: 4px solid #0ea5e9; /* sky-500 */ color: #0c4a6e; /* sky-800 */ border-radius: 0.25rem; white-space: pre-wrap; font-size: 0.9rem; }
+        .loading-spinner { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; margin: 1rem auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-amber-50 text-slate-700 antialiased">
+
+    <header class="bg-white shadow-md sticky top-0 z-50">
+        <nav class="container mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center">
+                    <span class="font-bold text-xl text-sky-600">Grading Equity Explorer ✨</span>
+                </div>
+                <div class="hidden md:block">
+                    <div class="ml-10 flex items-baseline space-x-4">
+                        <a href="#challenge" class="nav-item text-slate-600">The Challenge</a>
+                        <a href="#solution" class="nav-item text-slate-600">The Solution</a>
+                        <a href="#implementation" class="nav-item text-slate-600">Implementation</a>
+                        <a href="#forward" class="nav-item text-slate-600">Path Forward</a>
+                    </div>
+                </div>
+                <div class="md:hidden">
+                    <button id="mobile-menu-button" class="inline-flex items-center justify-center p-2 rounded-md text-slate-400 hover:text-slate-500 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-sky-500">
+                        <span class="sr-only">Open main menu</span>
+                        <svg class="block h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                        </svg>
+                        <svg class="hidden h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </nav>
+        <div id="mobile-menu" class="md:hidden hidden">
+            <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3">
+                <a href="#challenge" class="block nav-item text-slate-600">The Challenge</a>
+                <a href="#solution" class="block nav-item text-slate-600">The Solution</a>
+                <a href="#implementation" class="block nav-item text-slate-600">Implementation</a>
+                <a href="#forward" class="block nav-item text-slate-600">Path Forward</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="container mx-auto p-4 sm:p-6 lg:p-8">
+        <section id="challenge" class="pt-16 -mt-16 mb-12">
+            <h2 class="section-title">The Challenge: "Lasting Differences" Report Insights</h2>
+            <p class="mb-6 text-lg">The University of Chicago Consortium on School Research report, "Lasting Differences: Math Grades and Gender," highlights persistent gender-based grade disparities in Chicago Public Schools (CPS). This section delves into the report's key findings, revealing the extent of these differences and exploring factors such as teacher grading practices and course placement. Understanding these challenges is the first step towards fostering more equitable educational outcomes.</p>
+
+            <div class="grid md:grid-cols-2 gap-8">
+                <div class="content-card">
+                    <h3 class="subsection-title">Key Finding 1: The Gender Grade Gap</h3>
+                    <p class="mb-4">The report confirms a consistent gap in ninth-grade math grades, with young women earning higher grades than young men. This difference was approximately 0.3 GPA points (e.g., 2.66 for young women vs. 2.33 for young men).</p>
+                    <div class="chart-container">
+                        <canvas id="genderGpaChart"></canvas>
+                    </div>
+                    <p class="mt-4 text-sm">This gap was notably consistent across various racial/ethnic groups and was not fully explained by prior achievement, attendance, or self-reported effort, suggesting systemic issues within grading practices.</p>
+                </div>
+
+                <div class="content-card">
+                    <h3 class="subsection-title">Key Finding 2: Teacher Practices & Course Placement</h3>
+                    <p class="mb-4">Teachers' grading practices varied, but on average, assessments (57%) and assignments (36%) were weighted most heavily. Behavior and other categories received much lower weights (7% and 1% respectively).</p>
+                    <div class="chart-container">
+                        <canvas id="gradingWeightsChart"></canvas>
+                    </div>
+                    <p class="mt-4 text-sm">Course placement also played a complex role. Young women were more often in geometry and honors courses (higher assessment weight), while young men were more often in algebra and regular courses (higher assignment weight). Despite young women excelling in assignments, their overrepresentation in courses weighting assessments more heavily paradoxically shrank a potentially larger grade gap.</p>
+                </div>
+            </div>
+
+            <div class="content-card mt-8">
+                <h3 class="subsection-title">Core Implications of the "Lasting Differences" Report</h3>
+                <ul class="list-disc list-inside space-y-2" id="reportImplicationsList">
+                    <li>Consider renewing professional standards and grading practice guidelines, co-developed with the Chicago Teachers Union (CTU).</li>
+                    <li>Improve young men's school experiences and outcomes, focusing on engagement and preparedness.</li>
+                    <li>Review course placement policies for equitable access to challenging instruction with necessary supports.</li>
+                    <li>Conduct further research into gender differences in other grades/subjects and qualitative studies on classroom dynamics.</li>
+                </ul>
+                <button id="generateDiscussionStarters" class="gemini-button">✨ Get AI-Powered Discussion Starters</button>
+                <div id="discussionStartersOutput" class="gemini-output hidden"></div>
+                <div id="discussionStartersLoading" class="loading-spinner hidden"></div>
+            </div>
+        </section>
+
+        <section id="solution" class="pt-16 -mt-16 mb-12">
+            <h2 class="section-title">The Solution: Grading for Equity</h2>
+            <p class="mb-6 text-lg">Grading for Equity (GfE) offers a transformative approach to make grades more accurate, bias-resistant, and motivational. This section explores the core tenets of GfE, contrasting them with traditional practices. By focusing on what students learn rather than compliance or behavior, GfE aims to create a fairer system that supports all students' growth.</p>
+
+            <h3 class="subsection-title">Core Tenets of Equitable Grading</h3>
+            <div id="gfePillarsTabs" class="mb-2">
+                <button class="tab-button active" data-tab="accuracy" data-pillar-name="Accuracy">Accuracy</button>
+                <button class="tab-button" data-tab="bias-resistance" data-pillar-name="Bias-Resistance">Bias-Resistance</button>
+                <button class="tab-button" data-tab="motivation" data-pillar-name="Motivation & Growth Mindset">Motivation</button>
+                <button class="tab-button" data-tab="transparency" data-pillar-name="Transparency">Transparency</button>
+            </div>
+
+            <div id="accuracyContent" class="tab-content active content-card">
+                <h4 class="font-semibold text-lg mb-2 text-sky-700">Accuracy</h4>
+                <p>Grades should accurately reflect a student's current level of mastery of defined learning standards. This often involves mathematically sound scales (e.g., 0-4, or 50% minimum on a 100-point scale) and emphasizing recent evidence of learning over averages that penalize early struggles. The goal is to make grades a true indicator of what a student knows and can do.</p>
+                <button class="gemini-button generateScenariosBtn" data-pillar="Accuracy">✨ Generate Classroom Scenarios</button>
+                <div class="gemini-output scenario-output hidden"></div>
+                <div class="loading-spinner scenario-loading hidden"></div>
+            </div>
+            <div id="bias-resistanceContent" class="tab-content content-card">
+                <h4 class="font-semibold text-lg mb-2 text-sky-700">Bias-Resistance</h4>
+                <p>Practices should consciously counteract institutional and implicit biases. A key strategy is separating academic grades from non-academic factors like behavior, effort, participation, or homework completion (if homework is practice). This ensures grades reflect learning, not compliance or subjective judgments that may be influenced by bias.</p>
+                <button class="gemini-button generateScenariosBtn" data-pillar="Bias-Resistance">✨ Generate Classroom Scenarios</button>
+                <div class="gemini-output scenario-output hidden"></div>
+                <div class="loading-spinner scenario-loading hidden"></div>
+            </div>
+            <div id="motivationContent" class="tab-content content-card">
+                <h4 class="font-semibold text-lg mb-2 text-sky-700">Motivation & Growth Mindset</h4>
+                <p>Grading policies should support student hope, perseverance, and a growth mindset. This includes allowing multiple opportunities to demonstrate learning (e.g., retakes, revisions), replacing previous scores with current mastery, and valuing learning from mistakes rather than solely penalizing errors. This approach encourages continuous improvement.</p>
+                <button class="gemini-button generateScenariosBtn" data-pillar="Motivation & Growth Mindset">✨ Generate Classroom Scenarios</button>
+                <div class="gemini-output scenario-output hidden"></div>
+                <div class="loading-spinner scenario-loading hidden"></div>
+            </div>
+            <div id="transparencyContent" class="tab-content content-card">
+                <h4 class="font-semibold text-lg mb-2 text-sky-700">Transparency</h4>
+                <p>Learning targets, academic standards, and success criteria (e.g., rubrics) should be clearly communicated to students. When students understand what's expected and how they can succeed, they are empowered to take ownership of their learning. Clear expectations reduce confusion and promote fairness.</p>
+                <button class="gemini-button generateScenariosBtn" data-pillar="Transparency">✨ Generate Classroom Scenarios</button>
+                <div class="gemini-output scenario-output hidden"></div>
+                <div class="loading-spinner scenario-loading hidden"></div>
+            </div>
+
+            <div class="content-card mt-8">
+                <h3 class="subsection-title">Comparing Approaches: Traditional vs. Equitable Grading</h3>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-slate-200">
+                        <thead class="bg-slate-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Aspect</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Traditional Grading</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Equitable Grading</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-slate-200">
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap font-medium text-slate-900">Primary Purpose</td>
+                                <td class="px-6 py-4">Rank students, communicate overall performance (often conflating achievement, behavior, effort).</td>
+                                <td class="px-6 py-4">Communicate current mastery of standards, provide actionable feedback for growth.</td>
+                            </tr>
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap font-medium text-slate-900">Calculation Methods</td>
+                                <td class="px-6 py-4">Averaging all scores (early attempts heavily influence), 0-100 scale (F has disproportionate range).</td>
+                                <td class="px-6 py-4">Emphasize recent evidence, mathematically sound scales (e.g., 0-4, 50-100 min), avoid penalties of zeros for non-submission if mastery opportunity remains.</td>
+                            </tr>
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap font-medium text-slate-900">Non-Academic Factors</td>
+                                <td class="px-6 py-4">Often included directly in academic grade or heavily weighted.</td>
+                                <td class="px-6 py-4">Reported separately; homework as practice, not primary grade component unless it assesses mastery.</td>
+                            </tr>
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap font-medium text-slate-900">Improvement Opportunities</td>
+                                <td class="px-6 py-4">Limited retakes/revisions, penalties for late work common.</td>
+                                <td class="px-6 py-4">Encourage retakes/revisions to show improved mastery, focus on learning over penalizing process.</td>
+                            </tr>
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap font-medium text-slate-900">Focus</td>
+                                <td class="px-6 py-4">Points accumulation, compliance.</td>
+                                <td class="px-6 py-4">Demonstration of learning and growth against standards.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section id="implementation" class="pt-16 -mt-16 mb-12">
+            <h2 class="section-title">Implementation: CPS & Aspen SIS</h2>
+            <p class="mb-6 text-lg">Translating Grading for Equity principles into practice within Chicago Public Schools involves navigating a complex landscape and leveraging tools like the Aspen Student Information System. This section explores recent CPS developments, how Aspen can be configured to support equitable grading, and the challenges inherent in such a systemic shift.</p>
+
+            <div class="content-card mb-8">
+                <h3 class="subsection-title">The Evolving CPS Landscape</h3>
+                <p class="mb-2">CPS allows schools autonomy in determining grading scales, leading to varied practices. Some high schools use a 50-100 scale or standards-based approaches, while others maintain traditional 0-100 scales. This flexibility has pros and cons:</p>
+                <ul class="list-disc list-inside space-y-1 mb-2">
+                    <li><strong>Case Study (Richards Career Academy):</strong> Piloted "no-zero" grading (50 minimum), unlimited redos, and late work acceptance. Faced teacher pushback on rigor and preparedness, eventually reverting to 0-100. Initial results post-reversal showed increased attendance but also more D/F *and* A/B grades.</li>
+                    <li><strong>CTU Position:</strong> Advocates for faculty approval on school-wide grading policies and emphasizes grades reflecting achievement, not behavior. Recommends at least three grading categories, with the largest not exceeding 50% weight.</li>
+                </ul>
+                <p>The discussion highlights ongoing debates about balancing student well-being, academic integrity, teacher autonomy, and systemic consistency.</p>
+            </div>
+
+            <div class="content-card">
+                <h3 class="subsection-title">Leveraging Aspen SIS for Equitable Grading</h3>
+                <p class="mb-4">Aspen SIS offers features that, with thoughtful configuration, can support Grading for Equity pillars. While not having explicit "GfE modules," its existing functionalities can be adapted:</p>
+
+                <div id="aspenAccordion">
+                    <div>
+                        <button class="accordion-button">
+                            <span>Accuracy (Reflecting Current Mastery, Mathematically Sound Scales)</span>
+                            <span class="accordion-icon">+</span>
+                        </button>
+                        <div class="accordion-content">
+                            <p class="font-semibold mb-1">Aspen Configuration:</p>
+                            <ul class="list-disc list-inside space-y-1">
+                                <li>Utilize "Teacher Grade Scales" for 0-4 mastery scales or similar, map to traditional percentages if needed.</li>
+                                <li>Implement "minimum grade" (e.g., 50 on 100-point scale) via minimum input values or custom scales.</li>
+                                <li>Structure gradebook calculations to weigh recent assessments more heavily (if Aspen allows such overrides) or use "most recent evidence" approaches.</li>
+                                <li>Configure category weighting to align with CTU guidelines (largest category ≤ 50%).</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <button class="accordion-button">
+                            <span>Bias-Resistance (Separating Academics from Behaviors)</span>
+                            <span class="accordion-icon">+</span>
+                        </button>
+                        <div class="accordion-content">
+                            <p class="font-semibold mb-1">Aspen Configuration:</p>
+                            <ul class="list-disc list-inside space-y-1">
+                                <li>Set up distinct "Assignment Categories": one for academic mastery (e.g., "Summative Assessments"), another for "Habits of Work" (e.g., "Collaboration," "Timeliness").</li>
+                                <li>"Habits of Work" categories should use separate rubrics/scales and NOT factor into the primary academic grade.</li>
+                                <li>Report "Habits of Work" as separate marks if report card formats allow (Aspen supports multiple grade columns).</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <button class="accordion-button">
+                            <span>Motivation & Growth Mindset (Multiple Opportunities, Valuing Learning)</span>
+                            <span class="accordion-icon">+</span>
+                        </button>
+                        <div class="accordion-content">
+                            <p class="font-semibold mb-1">Aspen Configuration:</p>
+                            <ul class="list-disc list-inside space-y-1">
+                                <li>Teachers can manually update scores for retakes/revisions.</li>
+                                <li>Use "Special Codes" (e.g., "REDO," "REVISED") to annotate updated scores.</li>
+                                <li>Employ "Footnote codes" or assignment comments for growth-oriented feedback.</li>
+                                <li>Use codes like "Incomplete" or "Missing" that don't average as zero initially, allowing students time to complete work.</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <button class="accordion-button">
+                            <span>Transparency (Clear Targets and Rubrics)</span>
+                            <span class="accordion-icon">+</span>
+                        </button>
+                        <div class="accordion-content">
+                            <p class="font-semibold mb-1">Aspen Configuration:</p>
+                            <ul class="list-disc list-inside space-y-1">
+                                <li>Use Aspen's class pages or integrate with LMS (e.g., Canvas) to post learning targets, rubrics, and exemplars.</li>
+                                <li>Use assignment descriptions to link to or detail standards being assessed.</li>
+                                <li>If using dedicated standards-based grading tools (like Mastery Connect, which can integrate), Aspen can serve as the repository for overall grades.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="content-card mt-8">
+                <h3 class="subsection-title">Navigating Implementation: Challenges & Considerations</h3>
+                 <ul class="list-disc list-inside space-y-2">
+                    <li><strong>Policy Coherence:</strong> Balancing school autonomy with the need for district-wide consistency and CTU agreements.</li>
+                    <li><strong>Technical & Logistical Support:</strong> Ensuring teachers are proficient in Aspen's advanced features and that custom scales map correctly to district standards for transcripts.</li>
+                    <li><strong>Data Implications:</strong> Understanding how changes affect metrics like "Freshman On-Track," GPAs, and school accountability.</li>
+                    <li><strong>Professional Development:</strong> PD must cover both the "how-to" of Aspen and the "why" of equitable grading, addressing teacher concerns.</li>
+                    <li><strong>Stakeholder Engagement:</strong> Open dialogue with teachers, students, parents, and administrators is vital for buy-in.</li>
+                    <li><strong>Systemic Alignment:</strong> Grading reform must align with curriculum, assessment design, and student intervention policies.</li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="forward" class="pt-16 -mt-16">
+            <h2 class="section-title">Path Forward: Recommendations & Conclusion</h2>
+            <p class="mb-6 text-lg">The journey towards equitable grading in CPS is ongoing. By learning from research like "Lasting Differences," embracing Grading for Equity principles, and strategically using tools like Aspen SIS, CPS can create more meaningful and fair systems. This final section outlines key recommendations for moving forward and concludes with the broader vision for this transformative work.</p>
+
+            <div class="content-card">
+                <h3 class="subsection-title">High-Level Recommendations for CPS</h3>
+                <ol class="list-decimal list-inside space-y-3">
+                    <li><strong>Develop a Coherent Framework for Equitable Grading:</strong>
+                        Collaborate with stakeholders (CTU, leaders, teachers, students, families) to create a research-informed framework or guiding principles. This should allow for school-level adaptation ("guided autonomy") rather than uncoordinated autonomy or conflicting mandates.
+                    </li>
+                    <li><strong>Invest in Sustained Professional Development:</strong>
+                        Provide ongoing, high-quality PD addressing both the philosophy of equitable grading and its practical application in Aspen. Share best practices from CPS schools already engaged in this work.
+                    </li>
+                    <li><strong>Strengthen Aspen Support and Guidance:</strong>
+                        Offer clear technical guidance, adaptable templates, and dedicated support for configuring Aspen. Ensure Aspen's reporting can transparently communicate nuanced grading information.
+                    </li>
+                    <li><strong>Promote a Culture of Inquiry and Continuous Improvement:</strong>
+                        Encourage schools to pilot, monitor, and evaluate their equitable grading practices using data from Aspen and other sources. Foster a district-wide learning community.
+                    </li>
+                    <li><strong>Ensure Systemic Alignment:</strong>
+                        Align equitable grading initiatives with broader district efforts in curriculum, instruction, assessment, and student support. Targeted interventions, especially at critical junctures like ninth grade, could have significant positive impacts.
+                    </li>
+                </ol>
+            </div>
+
+            <div class="mt-8 text-center p-6 bg-sky-100 text-sky-800 rounded-lg">
+                <p class="text-xl font-semibold">Conclusion</p>
+                <p class="mt-2">Adopting equitable grading is more than a technical update; it's a cultural shift towards systems that genuinely reflect student learning, mitigate biases, and support all students' success. While complex, this journey offers an opportunity to redefine grades from mere labels to meaningful tools for learning, communication, and fostering a growth mindset across Chicago Public Schools.</p>
+            </div>
+        </section>
+    </main>
+
+    <footer class="bg-slate-800 text-slate-300 text-center p-6 mt-12">
+        <p>&copy; 2025 Grading Equity Explorer. Information synthesized from public reports and resources. AI-features powered by Gemini.</p>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // Mobile menu toggle
+            const menuButton = document.getElementById('mobile-menu-button');
+            const mobileMenu = document.getElementById('mobile-menu');
+            menuButton.addEventListener('click', () => {
+                mobileMenu.classList.toggle('hidden');
+                menuButton.querySelectorAll('svg').forEach(svg => svg.classList.toggle('hidden'));
+            });
+
+            // Smooth scroll for nav links & close mobile menu on click
+            document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+                anchor.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    const targetId = this.getAttribute('href');
+                    const targetElement = document.querySelector(targetId);
+                    if (targetElement) {
+                        targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                    if (!mobileMenu.classList.contains('hidden')) {
+                         mobileMenu.classList.add('hidden');
+                         menuButton.querySelectorAll('svg').forEach(svg => svg.classList.toggle('hidden'));
+                    }
+                });
+            });
+
+            // Active nav highlighting on scroll
+            const sections = document.querySelectorAll('section');
+            const navLinks = document.querySelectorAll('nav a.nav-item');
+            window.onscroll = () => {
+                let current = '';
+                sections.forEach(section => {
+                    const sectionTop = section.offsetTop;
+                    if (pageYOffset >= sectionTop - 80) { // 80px offset for sticky header
+                        current = section.getAttribute('id');
+                    }
+                });
+
+                navLinks.forEach(link => {
+                    link.classList.remove('active-nav', 'text-white', 'bg-sky-600');
+                    link.classList.add('text-slate-600');
+                    if (link.getAttribute('href').substring(1) === current) {
+                        link.classList.add('active-nav', 'text-white', 'bg-sky-600');
+                        link.classList.remove('text-slate-600');
+                    }
+                });
+            };
+
+
+            // Chart.js Implementations
+            const genderGpaData = {
+                labels: ['Young Women', 'Young Men'],
+                datasets: [{
+                    label: 'Average 9th Grade Math GPA',
+                    data: [2.66, 2.33],
+                    backgroundColor: ['#38bdf8', '#34d399'], // sky-400, emerald-400
+                    borderColor: ['#0ea5e9', '#10b981'], // sky-500, emerald-500
+                    borderWidth: 1
+                }]
+            };
+            new Chart(document.getElementById('genderGpaChart'), {
+                type: 'bar',
+                data: genderGpaData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, max: 4.0 } },
+                    plugins: { legend: { display: false }, title: { display: true, text: '9th Grade Math GPA Comparison' } }
+                }
+            });
+
+            const gradingWeightsData = {
+                labels: ['Assessments', 'Assignments', 'Behavior', 'Other'],
+                datasets: [{
+                    label: 'Average Weight in Grading',
+                    data: [57, 36, 7, 1],
+                    backgroundColor: ['#fbbf24', '#f87171', '#60a5fa', '#a78bfa'], // amber-400, red-400, blue-400, violet-400
+                    hoverOffset: 4
+                }]
+            };
+            new Chart(document.getElementById('gradingWeightsChart'), {
+                type: 'pie',
+                data: gradingWeightsData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'top' }, title: { display: true, text: 'Average Teacher Grading Weights' } }
+                }
+            });
+
+            // GFE Pillars Tabs
+            const tabButtons = document.querySelectorAll('#gfePillarsTabs .tab-button');
+            const tabContents = document.querySelectorAll('.tab-content');
+
+            tabButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    const tabId = button.dataset.tab;
+
+                    tabButtons.forEach(btn => btn.classList.remove('active'));
+                    button.classList.add('active');
+
+                    tabContents.forEach(content => {
+                        content.classList.remove('active');
+                        if (content.id === `${tabId}Content`) {
+                            content.classList.add('active');
+                        }
+                    });
+                });
+            });
+
+            // Aspen Accordion
+            const accordionButtons = document.querySelectorAll('.accordion-button');
+            accordionButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    const content = button.nextElementSibling;
+                    const icon = button.querySelector('.accordion-icon');
+                    const isOpening = content.style.display !== 'block';
+
+                    content.style.display = isOpening ? 'block' : 'none';
+                    icon.textContent = isOpening ? '-' : '+';
+                });
+            });
+
+            // Gemini API Integration
+            const apiKey = ""; // No API key needed for gemini-2.0-flash in this environment
+
+            async function callGeminiAPI(prompt, outputElement, loadingElement) {
+                loadingElement.classList.remove('hidden');
+                outputElement.classList.add('hidden');
+                outputElement.textContent = '';
+
+                const chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
+                const payload = { contents: chatHistory };
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        console.error("API Error:", errorData);
+                        throw new Error(`API request failed with status ${response.status}: ${errorData.error?.message || 'Unknown error'}`);
+                    }
+
+                    const result = await response.json();
+
+                    if (result.candidates && result.candidates.length > 0 &&
+                        result.candidates[0].content && result.candidates[0].content.parts &&
+                        result.candidates[0].content.parts.length > 0) {
+                        const text = result.candidates[0].content.parts[0].text;
+                        outputElement.textContent = text;
+                        outputElement.classList.remove('hidden');
+                    } else {
+                        console.error("Unexpected API response structure:", result);
+                        outputElement.textContent = 'Error: Could not retrieve valid content from AI.';
+                        outputElement.classList.remove('hidden');
+                    }
+                } catch (error) {
+                    console.error('Error calling Gemini API:', error);
+                    outputElement.textContent = `Error: ${error.message}. Check console for details.`;
+                    outputElement.classList.remove('hidden');
+                } finally {
+                    loadingElement.classList.add('hidden');
+                }
+            }
+
+            // Discussion Starters
+            const generateDiscussionBtn = document.getElementById('generateDiscussionStarters');
+            const discussionOutputEl = document.getElementById('discussionStartersOutput');
+            const discussionLoadingEl = document.getElementById('discussionStartersLoading');
+
+            if (generateDiscussionBtn) {
+                generateDiscussionBtn.addEventListener('click', () => {
+                    const implicationsList = document.getElementById('reportImplicationsList');
+                    let implicationsText = "Core implications from the 'Lasting Differences' report include:\n";
+                    implicationsList.querySelectorAll('li').forEach(li => {
+                        implicationsText += `- ${li.textContent}\n`;
+                    });
+                    const prompt = `Based on the following implications from the "Lasting Differences" report regarding math grades and gender in Chicago Public Schools, generate 3-4 insightful discussion starter questions for educators and policymakers:\n\n${implicationsText}\n\nFocus on questions that encourage critical thinking about solutions and systemic changes.`;
+                    callGeminiAPI(prompt, discussionOutputEl, discussionLoadingEl);
+                });
+            }
+
+            // Classroom Scenarios for GFE Pillars
+            const generateScenarioBtns = document.querySelectorAll('.generateScenariosBtn');
+            generateScenarioBtns.forEach(button => {
+                button.addEventListener('click', () => {
+                    const pillar = button.dataset.pillar;
+                    const pillarDescription = button.parentElement.querySelector('p').textContent;
+                    const outputElement = button.parentElement.querySelector('.scenario-output');
+                    const loadingElement = button.parentElement.querySelector('.scenario-loading');
+                    const prompt = `Generate 1-2 brief (2-3 sentences each) and distinct classroom scenarios that illustrate the Grading for Equity pillar of "${pillar}". The pillar is described as: "${pillarDescription}". The scenarios should clearly show this pillar in action or its absence. Make the scenarios relatable for K-12 teachers.`;
+                    callGeminiAPI(prompt, outputElement, loadingElement);
+                });
+            });
+
+        });
+    </script>
+</body>
+</html>
